@@ -1,2 +1,30 @@
 #include <windows.h>
+1 ICON "app_icon.ico"
 1 RT_MANIFEST "app.manifest"
+2 RCDATA "app_icon.png"
+
+1 VERSIONINFO
+FILEVERSION     0,1,0,0
+PRODUCTVERSION  0,1,0,0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "080404b0"
+    BEGIN
+      VALUE "CompanyName",      "Ollama Plus GUI"
+      VALUE "FileDescription",  "Ollama Plus GUI"
+      VALUE "FileVersion",      "0.1.0.0"
+      VALUE "InternalName",     "OllamaPlusGUI"
+      VALUE "LegalCopyright",   "MIT License"
+      VALUE "OriginalFilename", "OllamaPlusGUI.exe"
+      VALUE "ProductName",      "Ollama Plus GUI"
+      VALUE "ProductVersion",   "0.1.0.0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0804, 1200
+  END
+END

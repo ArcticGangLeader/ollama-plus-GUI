@@ -1,0 +1,1 @@
+{"model":"Gemma4E4b:latest","messages":[{"role":"user","content":"用一句话说明1+1为什么等于2，然后只回复完成"}],"stream":true,"think":true}

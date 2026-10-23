@@ -312,7 +312,83 @@ inline bool httpDownloadFile(const std::wstring& url, const std::wstring& destin
     return true;
 }
 
+
+struct StreamResponse {
+    DWORD status = 0;
+    std::string body;
+    std::wstring error;
+    bool ok() const { return error.empty() && status >= 200 && status < 300; }
+};
+
+inline StreamResponse httpStreamRequest(const std::wstring& method, const std::wstring& url,
+                                        const std::string& body, const wchar_t* contentType,
+                                        const std::function<bool(const std::string&)>& onChunk) {
+    StreamResponse response;
+    std::wstring host, path;
+    INTERNET_PORT port = INTERNET_DEFAULT_HTTP_PORT;
+    bool secure = false;
+    splitUrl(url, host, path, port, secure);
+
+    HttpHandle session(WinHttpOpen(L"OllamaPlusGUI/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                   WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
+    if (!session) { response.error = lastWinHttpError(L"初始化网络会话"); return response; }
+    HttpHandle connect(WinHttpConnect(session.get(), host.c_str(), port, 0));
+    if (!connect) { response.error = lastWinHttpError(L"连接 Ollama 服务"); return response; }
+    HttpHandle request(WinHttpOpenRequest(connect.get(), method.c_str(), path.c_str(), nullptr,
+                                          WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                          secure ? WINHTTP_FLAG_SECURE : 0));
+    if (!request) { response.error = lastWinHttpError(L"创建 Ollama 请求"); return response; }
+
+    std::wstring headers = L"Accept: application/x-ndjson, application/json\r\n";
+    if (contentType) headers += std::wstring(L"Content-Type: ") + contentType + L"\r\n";
+    if (!WinHttpAddRequestHeaders(request.get(), headers.c_str(), static_cast<DWORD>(-1),
+                                  WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE) ||
+        !WinHttpSendRequest(request.get(), WINHTTP_NO_ADDITIONAL_HEADERS, static_cast<DWORD>(-1),
+                            body.empty() ? WINHTTP_NO_REQUEST_DATA : const_cast<char*>(body.data()),
+                            static_cast<DWORD>(body.size()), static_cast<DWORD>(body.size()), 0) ||
+        !WinHttpReceiveResponse(request.get(), nullptr)) {
+        response.error = lastWinHttpError(L"发送 Ollama 请求");
+        return response;
+    }
+
+    DWORD statusCode = 0;
+    DWORD size = sizeof(statusCode);
+    if (!WinHttpQueryHeaders(request.get(), WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                             WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &size, WINHTTP_NO_HEADER_INDEX)) {
+        response.error = lastWinHttpError(L"读取 Ollama 响应状态");
+        return response;
+    }
+    response.status = statusCode;
+
+    std::vector<char> buffer(64 * 1024);
+    for (;;) {
+        DWORD available = 0;
+        if (!WinHttpQueryDataAvailable(request.get(), &available)) {
+            response.error = lastWinHttpError(L"查询 Ollama 响应数据");
+            return response;
+        }
+        if (available == 0) break;
+        DWORD toRead = static_cast<DWORD>((std::min)(static_cast<size_t>(available), buffer.size()));
+        DWORD read = 0;
+        if (!WinHttpReadData(request.get(), buffer.data(), toRead, &read)) {
+            response.error = lastWinHttpError(L"读取 Ollama 响应数据");
+            return response;
+        }
+        if (read == 0) break;
+        std::string chunk(buffer.data(), buffer.data() + read);
+        if (response.status >= 200 && response.status < 300) {
+            if (onChunk && !onChunk(chunk)) {
+                response.error = L"请求已取消。";
+                return response;
+            }
+        } else {
+            response.body += chunk;
+        }
+    }
+    return response;
+}
 } // namespace opg
+
 
 
 
